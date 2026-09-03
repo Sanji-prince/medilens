@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../lib/api'
 import { initials } from '../lib/format'
-import { FolderEmptyIcon, SpinnerIcon } from '../components/Icons'
+import { FolderEmptyIcon } from '../components/Icons'
+import { EmptyState, ErrorState, InlineSpinner, LoadingState } from '../components/StateViews'
 
 const VITAL_TYPES = [
   { value: 'blood_pressure', label: 'Blood Pressure' },
@@ -17,6 +18,7 @@ export default function FamilyProfile() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [viewerDoc, setViewerDoc] = useState(null)
+  const [deletingDocumentId, setDeletingDocumentId] = useState(null)
 
   useEffect(() => { refresh() }, [id])
 
@@ -27,7 +29,7 @@ export default function FamilyProfile() {
       setData(result)
       setError('')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to load this family profile. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -35,21 +37,18 @@ export default function FamilyProfile() {
 
   async function handleDeleteDocument(docId) {
     if (!window.confirm('Are you sure you want to delete this document?')) return
+    setDeletingDocumentId(docId)
     try {
       await api.delete(`/api/documents/${docId}`)
       refresh()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to delete this document. Please try again.')
+    } finally {
+      setDeletingDocumentId(null)
     }
   }
 
-  if (loading && !data) {
-    return (
-      <div className="flex justify-center py-16 animate-fade-in">
-        <SpinnerIcon className="w-8 h-8 text-blue-700" />
-      </div>
-    )
-  }
+  if (loading && !data) return <LoadingState label="Loading family profile…" className="animate-fade-in" />
 
   const { member, items, current_medications } = data || {}
 
@@ -57,12 +56,12 @@ export default function FamilyProfile() {
     return (
       <div className="space-y-4 animate-fade-in">
         <button
-          onClick={() => navigate('/')}
+          onClick={() => navigate('/dashboard')}
           className="text-sm text-blue-700 hover:text-blue-900 inline-flex items-center gap-1"
         >
           &larr; Back to dashboard
         </button>
-        <div className="bg-red-50 text-red-600 rounded-xl px-4 py-3 text-sm border border-red-100">{error}</div>
+        <ErrorState title="Could not load family profile" message={error} onRetry={refresh} />
       </div>
     )
   }
@@ -70,30 +69,48 @@ export default function FamilyProfile() {
   return (
     <div className="animate-fade-in">
       <button
-        onClick={() => navigate('/')}
+        onClick={() => navigate('/dashboard')}
         className="text-sm text-blue-700 hover:text-blue-900 mb-5 inline-flex items-center gap-1 font-medium"
       >
         &larr; Back to dashboard
       </button>
 
+      {loading && (
+        <div className="mb-4 text-sm text-blue-700">
+          <InlineSpinner label="Refreshing profile…" />
+        </div>
+      )}
+
       {error && (
-        <div className="bg-red-50 text-red-600 rounded-xl px-4 py-3 mb-5 text-sm border border-red-100">{error}</div>
+        <ErrorState
+          title="Could not update family profile"
+          message={error}
+          onRetry={refresh}
+          className="mb-5"
+        />
       )}
 
       <div className="bg-white rounded-2xl border border-blue-100 shadow-md p-6 mb-8">
-        <div className="flex items-start justify-between gap-4">
-          <div className="flex items-center gap-4">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+          <div className="flex min-w-0 items-center gap-4">
             <div className="w-16 h-16 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 text-white flex items-center justify-center text-lg font-bold shadow-lg shadow-blue-200 shrink-0">
               {initials(member?.name)}
             </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{member?.name}</h1>
+            <div className="min-w-0">
+              <h1 className="text-2xl font-bold text-gray-900 truncate">{member?.name}</h1>
               {member?.age != null && (
                 <p className="text-sm text-gray-500 mt-0.5">Age {member.age}</p>
               )}
             </div>
           </div>
-          <RemoveMemberButton memberId={id} onRemoved={() => navigate('/')} />
+          <div className="flex items-start gap-2 self-end sm:self-auto">
+            <ExportSummaryButton
+              member={member}
+              items={items}
+              currentMedications={current_medications}
+            />
+            <RemoveMemberButton memberId={id} onRemoved={() => navigate('/')} />
+          </div>
         </div>
         <div className="mt-4 flex flex-wrap gap-2">
           {member?.chronic_conditions?.map((c, i) => (
@@ -125,13 +142,13 @@ export default function FamilyProfile() {
 
       <h2 className="text-lg font-bold text-gray-900 mb-4">Timeline</h2>
       {!items?.length ? (
-        <div className="text-center py-14 bg-white rounded-2xl border border-blue-100 shadow-sm">
-          <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-blue-50 text-blue-300 mb-4">
-            <FolderEmptyIcon className="w-7 h-7" />
-          </div>
-          <p className="text-base font-semibold text-gray-900 mb-1">No documents or vitals recorded yet</p>
-          <p className="text-sm text-gray-500">Upload a document or log a vital to start tracking.</p>
-        </div>
+        <EmptyState
+          icon={FolderEmptyIcon}
+          iconClassName="w-7 h-7"
+          title="No documents or vitals recorded yet"
+          description="Upload a document or log a vital to start tracking."
+          className="py-14"
+        />
       ) : (
         <div className="space-y-3">
           {items.map(item => (
@@ -139,6 +156,7 @@ export default function FamilyProfile() {
               key={`${item.kind}-${item.id}`}
               item={item}
               onDeleteDocument={item.kind === 'document' ? () => handleDeleteDocument(item.id) : undefined}
+              isDeletingDocument={item.kind === 'document' && deletingDocumentId === item.id}
               onVitalChanged={item.kind === 'vital' ? refresh : undefined}
               onViewImage={item.kind === 'document' ? () => setViewerDoc(item) : undefined}
             />
@@ -179,7 +197,7 @@ function UploadForm({ memberId, onUploaded }) {
       e.target.reset()
       onUploaded()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to upload this document. Please try again.')
     } finally {
       setUploading(false)
     }
@@ -196,26 +214,19 @@ function UploadForm({ memberId, onUploaded }) {
           className="block w-full text-sm text-gray-600 file:mr-3 file:py-2.5 file:px-4 file:rounded-xl file:border-0 file:text-sm file:font-semibold file:bg-blue-100 file:text-blue-700 hover:file:bg-blue-200 file:cursor-pointer file:min-h-11 disabled:opacity-50"
         />
         {uploading && (
-          <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl">
-            <div className="flex items-center gap-2 text-blue-700 text-sm font-medium">
-              <SpinnerIcon className="w-5 h-5" />
-              Extracting with AI…
-            </div>
+          <div className="absolute inset-0 bg-white/80 flex items-center justify-center rounded-xl" aria-busy="true">
+            <InlineSpinner label="Extracting with AI…" className="text-blue-700 text-sm font-medium" />
           </div>
         )}
       </div>
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-      {success && <p className="text-xs text-green-700 mt-2">{success}</p>}
+      {error && <p className="text-xs text-red-600 mt-2" role="alert">{error}</p>}
+      {success && <p className="text-xs text-green-700 mt-2" role="status" aria-live="polite">{success}</p>}
       <button
         type="submit"
         disabled={!file || uploading}
         className="mt-4 bg-blue-700 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all w-full sm:w-auto"
       >
-        {uploading ? (
-          <span className="inline-flex items-center gap-2">
-            <SpinnerIcon className="w-4 h-4" /> Uploading…
-          </span>
-        ) : 'Upload'}
+        {uploading ? <InlineSpinner label="Uploading…" /> : 'Upload'}
       </button>
     </form>
   )
@@ -240,7 +251,7 @@ function VitalForm({ memberId, onCreated }) {
       setValue('')
       onCreated()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to record this vital. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -274,24 +285,20 @@ function VitalForm({ memberId, onCreated }) {
           className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
         />
       </div>
-      {error && <p className="text-xs text-red-600 mt-2">{error}</p>}
-      {success && <p className="text-xs text-green-700 mt-2">{success}</p>}
+      {error && <p className="text-xs text-red-600 mt-2" role="alert">{error}</p>}
+      {success && <p className="text-xs text-green-700 mt-2" role="status" aria-live="polite">{success}</p>}
       <button
         type="submit"
         disabled={saving || !value}
         className="mt-4 bg-blue-700 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all w-full sm:w-auto"
       >
-        {saving ? (
-          <span className="inline-flex items-center gap-2">
-            <SpinnerIcon className="w-4 h-4" /> Saving…
-          </span>
-        ) : 'Log Vital'}
+        {saving ? <InlineSpinner label="Saving…" /> : 'Log Vital'}
       </button>
     </form>
   )
 }
 
-function TimelineItem({ item, onDeleteDocument, onVitalChanged, onViewImage }) {
+function TimelineItem({ item, onDeleteDocument, isDeletingDocument, onVitalChanged, onViewImage }) {
   const date = new Date(item.occurred_at).toLocaleDateString('en-US', {
     year: 'numeric', month: 'short', day: 'numeric',
   })
@@ -335,9 +342,10 @@ function TimelineItem({ item, onDeleteDocument, onVitalChanged, onViewImage }) {
             {onDeleteDocument && (
               <button
                 onClick={onDeleteDocument}
-                className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-medium px-2 py-1 rounded-lg transition-colors"
+                disabled={isDeletingDocument}
+                className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
               >
-                Delete
+                {isDeletingDocument ? <InlineSpinner label="Deleting…" /> : 'Delete'}
               </button>
             )}
           </div>
@@ -412,7 +420,7 @@ function VitalTimelineItem({ item, onChanged }) {
       setEditing(false)
       onChanged()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to save this vital. Please try again.')
     } finally {
       setBusy(false)
     }
@@ -425,7 +433,7 @@ function VitalTimelineItem({ item, onChanged }) {
       await api.delete(`/api/vitals/${item.id}`)
       onChanged()
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to delete this vital. Please try again.')
       setBusy(false)
     }
   }
@@ -464,18 +472,14 @@ function VitalTimelineItem({ item, onChanged }) {
               className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
             />
           </div>
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
           <div className="flex gap-2">
             <button
               onClick={handleSave}
               disabled={busy || !value.trim() || !date}
               className="bg-blue-700 text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all"
             >
-              {busy ? (
-                <span className="inline-flex items-center gap-2">
-                  <SpinnerIcon className="w-4 h-4" /> Saving…
-                </span>
-              ) : 'Save'}
+              {busy ? <InlineSpinner label="Saving…" /> : 'Save'}
             </button>
             <button
               onClick={cancelEdit}
@@ -508,7 +512,7 @@ function VitalTimelineItem({ item, onChanged }) {
               From document
             </span>
           )}
-          {error && <p className="text-xs text-red-600">{error}</p>}
+          {error && <p className="text-xs text-red-600" role="alert">{error}</p>}
         </div>
       </div>
       {onChanged && (
@@ -525,7 +529,7 @@ function VitalTimelineItem({ item, onChanged }) {
             disabled={busy}
             className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-medium px-2 py-1 rounded-lg transition-colors disabled:opacity-50"
           >
-            {busy ? 'Deleting…' : 'Delete'}
+            {busy ? <InlineSpinner label="Deleting…" /> : 'Delete'}
           </button>
         </div>
       )}
@@ -564,7 +568,7 @@ function DownloadLink({ url, fileName }) {
       disabled={downloading}
       className="text-sm text-blue-700 hover:text-blue-900 font-semibold disabled:opacity-50"
     >
-      {downloading ? 'Downloading…' : 'Download'}
+      {downloading ? <InlineSpinner label="Downloading…" /> : 'Download'}
     </button>
   )
 }
@@ -726,29 +730,67 @@ function ImageViewerModal({ src, fileName, onClose }) {
   )
 }
 
+function ExportSummaryButton({ member, items, currentMedications }) {
+  const [exporting, setExporting] = useState(false)
+  const [error, setError] = useState('')
+
+  async function handleExport() {
+    if (exporting || !member) return
+    setExporting(true)
+    setError('')
+    try {
+      const { exportHealthSummaryPdf } = await import('../lib/pdf')
+      await exportHealthSummaryPdf({ member, items, currentMedications })
+    } catch (err) {
+      setError(err.message || 'Unable to export this summary. Please try again.')
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col items-end gap-2">
+      <button
+        type="button"
+        onClick={handleExport}
+        disabled={exporting || !member}
+        className="text-xs text-blue-700 hover:text-blue-900 hover:bg-blue-50 font-medium px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-blue-100 disabled:opacity-50"
+      >
+        {exporting ? <InlineSpinner label="Preparing PDF…" /> : 'Export Health Summary'}
+      </button>
+      {error && <p className="max-w-48 text-right text-xs text-red-600" role="alert">{error}</p>}
+    </div>
+  )
+}
+
 function RemoveMemberButton({ memberId, onRemoved }) {
   const [deleting, setDeleting] = useState(false)
+  const [error, setError] = useState('')
 
   async function handleRemove() {
     const message = 'Are you sure you want to remove this family member? This will also delete all their documents and vitals.'
     if (!window.confirm(message)) return
     setDeleting(true)
+    setError('')
     try {
       await api.delete(`/api/family-members/${memberId}`)
       onRemoved()
     } catch (err) {
-      alert(err.message || 'Failed to remove family member')
+      setError(err.message || 'Unable to remove this family member. Please try again.')
       setDeleting(false)
     }
   }
 
   return (
-    <button
-      onClick={handleRemove}
-      disabled={deleting}
-      className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-medium px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
-    >
-      {deleting ? 'Removing…' : 'Remove'}
-    </button>
+    <div className="flex flex-col items-end gap-2">
+      <button
+        onClick={handleRemove}
+        disabled={deleting}
+        className="text-xs text-red-600 hover:text-red-800 hover:bg-red-50 font-medium px-3 py-2 rounded-lg transition-colors border border-transparent hover:border-red-100 disabled:opacity-50"
+      >
+        {deleting ? <InlineSpinner label="Removing…" /> : 'Remove'}
+      </button>
+      {error && <p className="max-w-48 text-right text-xs text-red-600" role="alert">{error}</p>}
+    </div>
   )
 }

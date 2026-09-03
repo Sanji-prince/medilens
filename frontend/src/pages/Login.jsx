@@ -1,19 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
-import { LogoIcon, SpinnerIcon } from '../components/Icons'
+import { LogoIcon } from '../components/Icons'
+import { ErrorState, InlineSpinner, LoadingState } from '../components/StateViews'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [isSignUp, setIsSignUp] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [demoLoading, setDemoLoading] = useState(false)
   const [error, setError] = useState('')
   const [message, setMessage] = useState('')
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const demoStarted = useRef(false)
   const demoMode = searchParams.get('mode') === 'demo'
+  const isBusy = loading || demoLoading
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -21,27 +24,31 @@ export default function Login() {
     setError('')
     setMessage('')
 
-    if (isSignUp) {
-      const { error } = await supabase.auth.signUp({ email, password })
-      if (error) {
-        setError(error.message)
+    try {
+      if (isSignUp) {
+        const { error } = await supabase.auth.signUp({ email, password })
+        if (error) {
+          setError(error.message)
+        } else {
+          setMessage('Check your email to confirm your account, then sign in.')
+        }
       } else {
-        setMessage('Check your email to confirm your account, then sign in.')
+        const { error } = await supabase.auth.signInWithPassword({ email, password })
+        if (error) {
+          setError(error.message)
+        } else {
+          navigate('/dashboard')
+        }
       }
-    } else {
-      const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) {
-        setError(error.message)
-      } else {
-        navigate('/dashboard')
-      }
+    } catch (err) {
+      setError(err.message || 'Unable to complete your request. Please try again.')
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   const handleDemoLogin = useCallback(async () => {
-    setLoading(true)
+    setDemoLoading(true)
     setError('')
     setMessage('')
     try {
@@ -57,9 +64,9 @@ export default function Login() {
 
       navigate('/dashboard')
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to start the demo. Please try again.')
     } finally {
-      setLoading(false)
+      setDemoLoading(false)
     }
   }, [navigate])
 
@@ -68,6 +75,10 @@ export default function Login() {
     demoStarted.current = true
     void handleDemoLogin()
   }, [demoMode, handleDemoLogin])
+
+  const errorTitle = demoMode
+    ? 'Unable to start demo'
+    : isSignUp ? 'Unable to create account' : 'Unable to sign in'
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-blue-50 px-4 animate-fade-in">
@@ -78,77 +89,84 @@ export default function Login() {
           </div>
           <h1 className="text-3xl font-extrabold text-blue-700 text-center tracking-tight">MediLens</h1>
           <p className="text-gray-500 text-center text-sm mt-1">
-            {isSignUp ? 'Create your account' : 'Sign in to your account'}
+            {demoMode && demoLoading ? 'Starting your demo…' : isSignUp ? 'Create your account' : 'Sign in to your account'}
           </p>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
-            <input
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
-            <input
-              type="password"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={6}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow"
-            />
-          </div>
+        {demoMode && demoLoading ? (
+          <LoadingState label="Starting your demo…" className="py-8" />
+        ) : (
+          <>
+            {error && (
+              <ErrorState
+                title={errorTitle}
+                message={error}
+                onRetry={demoMode ? handleDemoLogin : undefined}
+                retryLabel="Try demo again"
+                className="mb-4 p-4"
+              />
+            )}
+            {message && (
+              <p className="text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2 border border-green-100" role="status" aria-live="polite">{message}</p>
+            )}
 
-          {error && (
-            <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 border border-red-100">{error}</p>
-          )}
-          {message && (
-            <p className="text-sm text-green-700 bg-green-50 rounded-xl px-3 py-2 border border-green-100">{message}</p>
-          )}
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                <input
+                  type="email"
+                  value={email}
+                  onChange={e => setEmail(e.target.value)}
+                  required
+                  disabled={isBusy}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:opacity-50"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">Password</label>
+                <input
+                  type="password"
+                  value={password}
+                  onChange={e => setPassword(e.target.value)}
+                  required
+                  minLength={6}
+                  disabled={isBusy}
+                  className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-shadow disabled:opacity-50"
+                />
+              </div>
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all"
-          >
-            {loading ? (
-              <span className="inline-flex items-center justify-center gap-2">
-                <SpinnerIcon className="w-4 h-4" /> Please wait…
-              </span>
-            ) : isSignUp ? 'Sign up' : 'Sign in'}
-          </button>
-        </form>
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="w-full bg-blue-700 text-white rounded-xl py-2.5 text-sm font-bold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all"
+              >
+                {loading ? <InlineSpinner label="Signing in…" /> : isSignUp ? 'Sign up' : 'Sign in'}
+              </button>
+            </form>
 
-        <button
-          onClick={() => { setIsSignUp(!isSignUp); setError(''); setMessage('') }}
-          className="mt-4 w-full text-sm text-blue-700 hover:text-blue-900 text-center font-medium"
-        >
-          {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
-        </button>
+            <button
+              onClick={() => { setIsSignUp(!isSignUp); setError(''); setMessage('') }}
+              disabled={isBusy}
+              className="mt-4 w-full text-sm text-blue-700 hover:text-blue-900 text-center font-medium disabled:opacity-50"
+            >
+              {isSignUp ? 'Already have an account? Sign in' : "Don't have an account? Sign up"}
+            </button>
 
-        <div className="mt-6 pt-6 border-t border-gray-200">
-          <button
-            type="button"
-            onClick={handleDemoLogin}
-            disabled={loading}
-            className="w-full bg-white text-blue-700 border border-blue-200 rounded-xl py-2.5 text-sm font-bold hover:bg-blue-50 disabled:opacity-50 min-h-11 transition-colors"
-          >
-            {loading ? (
-              <span className="inline-flex items-center justify-center gap-2">
-                <SpinnerIcon className="w-4 h-4" /> Please wait…
-              </span>
-            ) : 'Try Demo'}
-          </button>
-          <p className="text-xs text-gray-400 text-center mt-2">
-            Signs in as a read-only demo account
-          </p>
-        </div>
+            <div className="mt-6 pt-6 border-t border-gray-200">
+              <button
+                type="button"
+                onClick={handleDemoLogin}
+                disabled={isBusy}
+                className="w-full bg-white text-blue-700 border border-blue-200 rounded-xl py-2.5 text-sm font-bold hover:bg-blue-50 disabled:opacity-50 min-h-11 transition-colors"
+              >
+                {demoLoading ? <InlineSpinner label="Starting demo…" /> : 'Try Demo'}
+              </button>
+              <p className="text-xs text-gray-400 text-center mt-2">
+                Explore sample family data and add your own family members.
+              </p>
+            </div>
+          </>
+        )}
       </div>
     </div>
   )

@@ -3,9 +3,9 @@ import { api } from '../lib/api'
 import {
   AlertOctagonIcon,
   CheckCircleIcon,
-  SpinnerIcon,
   WarningTriangleIcon,
 } from '../components/Icons'
+import { ErrorState, InlineSpinner, RetryButton } from '../components/StateViews'
 
 const VERDICT_STYLES = {
   SAFE: {
@@ -92,20 +92,6 @@ function SafetySkeleton() {
   )
 }
 
-function RetryButton({ onClick, label = 'Retry' }) {
-  return (
-    <button
-      onClick={onClick}
-      className="inline-flex items-center gap-2 text-sm font-semibold text-blue-700 hover:text-blue-900 border border-blue-200 rounded-xl px-4 py-2 hover:bg-blue-50 transition-colors"
-    >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-      </svg>
-      {label}
-    </button>
-  )
-}
-
 function SearchSkeleton() {
   return (
     <div className="bg-white rounded-2xl border border-blue-100 shadow-md p-6 space-y-5">
@@ -131,6 +117,7 @@ export default function MedicineSearch() {
   const [membersError, setMembersError] = useState('')
   const [query, setQuery] = useState('')
   const [selectedMemberId, setSelectedMemberId] = useState('')
+  const [searchedMemberId, setSearchedMemberId] = useState('')
   const [loading, setLoading] = useState(false)
   const [result, setResult] = useState(null)
   const [error, setError] = useState('')
@@ -159,6 +146,7 @@ export default function MedicineSearch() {
 
   async function doSearch(q, memberId) {
     lastSearchRef.current = { query: q, selectedMemberId: memberId }
+    setSearchedMemberId(memberId)
     setLoading(true)
     setError('')
     setResult(null)
@@ -217,7 +205,7 @@ export default function MedicineSearch() {
         <p className="text-sm text-gray-500 mb-5">Search medications and get a personalized safety audit.</p>
 
         {membersError && (
-          <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-4 border border-red-100">{membersError}</p>
+          <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mb-4 border border-red-100" role="alert">{membersError}</p>
         )}
 
         <form onSubmit={handleSearch} className="space-y-4">
@@ -254,31 +242,30 @@ export default function MedicineSearch() {
             disabled={loading || !query.trim()}
             className="bg-blue-700 text-white rounded-xl px-5 py-2.5 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 min-h-11 w-full sm:w-auto shadow-md shadow-blue-200 hover:shadow-lg transition-all"
           >
-            {loading ? (
-              <span className="inline-flex items-center gap-2">
-                <SpinnerIcon className="w-4 h-4" /> Searching…
-              </span>
-            ) : selectedMemberId ? 'Search & Check Safety' : 'Search'}
+            {loading ? <InlineSpinner label="Searching…" /> : selectedMemberId ? 'Search & Check Safety' : 'Search'}
           </button>
         </form>
       </div>
 
-      {loading && <SearchSkeleton />}
-
-      {error && (
-        <div className="bg-red-50 text-red-700 rounded-2xl border border-red-100 p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-          <div>
-            <h3 className="font-semibold mb-0.5">Safety check unavailable</h3>
-            <p className="text-sm">{error}</p>
-          </div>
-          <RetryButton onClick={() => doSearch(lastSearchRef.current.query, lastSearchRef.current.selectedMemberId)} label="Try again" />
+      {loading && (
+        <div role="status" aria-live="polite" aria-busy="true">
+          <span className="sr-only">Searching medications…</span>
+          <SearchSkeleton />
         </div>
       )}
 
+      {error && (
+        <ErrorState
+          title="Safety check unavailable"
+          message={error}
+          onRetry={() => doSearch(lastSearchRef.current.query, lastSearchRef.current.selectedMemberId)}
+        />
+      )}
+
       {result?.status === 'NOT_FOUND' && (
-        <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 text-center">
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-md p-8 text-center" role="status" aria-live="polite">
           <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-gray-100 text-gray-400 mb-4">
-            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg className="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
             </svg>
           </div>
@@ -295,6 +282,9 @@ export default function MedicineSearch() {
               {result.drug?.brandName && result.drug.brandName !== result.drug?.genericName && (
                 <p className="text-sm text-gray-500 mt-1">Brand: {result.drug.brandName}</p>
               )}
+              <span className="inline-flex mt-3 rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+                Data sources: openFDA, RxNorm, Google Gemini
+              </span>
             </div>
             {result.safety?.verdict && VERDICT_STYLES[result.safety.verdict] && (
               <VerdictBadge verdict={result.safety.verdict} />
@@ -304,10 +294,8 @@ export default function MedicineSearch() {
           {/* Summary section */}
           <div className="border-t border-gray-100 pt-4">
             {summaryRetrying ? (
-              <div className="space-y-3">
-                <div className="flex items-center gap-2 text-sm text-blue-700 font-medium">
-                  <SpinnerIcon className="w-4 h-4" /> Loading summary…
-                </div>
+              <div className="space-y-3" role="status" aria-live="polite" aria-busy="true">
+                <InlineSpinner label="Loading summary…" className="text-sm text-blue-700 font-medium" />
                 <SummarySkeleton />
               </div>
             ) : isSummaryFailed(result.summary) ? (
@@ -340,13 +328,11 @@ export default function MedicineSearch() {
           </div>
 
           {/* Safety section — only shown when a family member was selected */}
-          {(result.safety || selectedMemberId) && (
+          {(result.safety || searchedMemberId) && (
             <div className="border-t border-gray-100 pt-4">
               {safetyRetrying ? (
-                <div className="space-y-3">
-                  <div className="flex items-center gap-2 text-sm text-blue-700 font-medium">
-                    <SpinnerIcon className="w-4 h-4" /> Loading safety assessment…
-                  </div>
+                <div className="space-y-3" role="status" aria-live="polite" aria-busy="true">
+                  <InlineSpinner label="Loading safety assessment…" className="text-sm text-blue-700 font-medium" />
                   <SafetySkeleton />
                 </div>
               ) : isSafetyFailed(result.safety) ? (

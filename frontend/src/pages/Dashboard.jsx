@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { api } from '../lib/api'
 import { initials } from '../lib/format'
-import { EmptyStateIcon, SpinnerIcon } from '../components/Icons'
+import { EmptyStateIcon } from '../components/Icons'
+import { EmptyState, ErrorState, InlineSpinner, LoadingState } from '../components/StateViews'
 
 export default function Dashboard() {
   const [members, setMembers] = useState([])
@@ -13,11 +14,13 @@ export default function Dashboard() {
   useEffect(() => { fetchMembers() }, [])
 
   async function fetchMembers() {
+    setLoading(true)
+    setError('')
     try {
       const data = await api.get('/api/family-members')
       setMembers(data)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to load family members. Please try again.')
     } finally {
       setLoading(false)
     }
@@ -35,10 +38,6 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {error && (
-        <div className="bg-red-50 text-red-600 rounded-xl px-4 py-3 mb-6 text-sm border border-red-100">{error}</div>
-      )}
-
       {showForm && (
         <AddFamilyMemberForm
           onCreated={(member) => {
@@ -49,17 +48,20 @@ export default function Dashboard() {
       )}
 
       {loading ? (
-        <div className="flex justify-center py-16">
-          <SpinnerIcon className="w-8 h-8 text-blue-700" />
-        </div>
+        <LoadingState label="Loading family members…" />
+      ) : error ? (
+        <ErrorState
+          title="Could not load family members"
+          message={error}
+          onRetry={fetchMembers}
+          className="mb-6"
+        />
       ) : members.length === 0 ? (
-        <div className="text-center py-16 bg-white rounded-2xl border border-blue-100 shadow-sm">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-blue-50 text-blue-300 mb-4">
-            <EmptyStateIcon className="w-8 h-8" />
-          </div>
-          <p className="text-lg font-semibold text-gray-900 mb-1">No family members yet</p>
-          <p className="text-sm text-gray-500">Add your first family member to get started.</p>
-        </div>
+        <EmptyState
+          icon={EmptyStateIcon}
+          title="No family members yet"
+          description="Add your first family member to get started."
+        />
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
           {members.map(m => (
@@ -120,7 +122,7 @@ function AddFamilyMemberForm({ onCreated }) {
       })
       onCreated(member)
     } catch (err) {
-      setError(err.message)
+      setError(err.message || 'Unable to add this family member. Please try again.')
     } finally {
       setSaving(false)
     }
@@ -136,7 +138,8 @@ function AddFamilyMemberForm({ onCreated }) {
             value={name}
             onChange={e => setName(e.target.value)}
             required
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+            disabled={saving}
+            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow disabled:opacity-50"
           />
         </div>
         <div>
@@ -147,7 +150,8 @@ function AddFamilyMemberForm({ onCreated }) {
             onChange={e => setAge(e.target.value)}
             min="0"
             max="149"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+            disabled={saving}
+            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow disabled:opacity-50"
           />
         </div>
         <div>
@@ -159,7 +163,8 @@ function AddFamilyMemberForm({ onCreated }) {
             value={conditions}
             onChange={e => setConditions(e.target.value)}
             placeholder="diabetes, hypertension"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+            disabled={saving}
+            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow disabled:opacity-50"
           />
         </div>
         <div>
@@ -171,13 +176,14 @@ function AddFamilyMemberForm({ onCreated }) {
             value={allergies}
             onChange={e => setAllergies(e.target.value)}
             placeholder="penicillin, peanuts"
-            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow"
+            disabled={saving}
+            className="w-full rounded-xl border border-gray-300 px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 transition-shadow disabled:opacity-50"
           />
         </div>
       </div>
 
       {error && (
-        <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mt-4 border border-red-100">{error}</p>
+        <p className="text-sm text-red-600 bg-red-50 rounded-xl px-3 py-2 mt-4 border border-red-100" role="alert">{error}</p>
       )}
 
       <button
@@ -185,11 +191,7 @@ function AddFamilyMemberForm({ onCreated }) {
         disabled={saving}
         className="mt-5 bg-blue-700 text-white rounded-xl px-6 py-2.5 text-sm font-semibold hover:bg-blue-800 disabled:opacity-50 min-h-11 shadow-md shadow-blue-200 hover:shadow-lg transition-all"
       >
-        {saving ? (
-          <span className="inline-flex items-center gap-2">
-            <SpinnerIcon className="w-4 h-4" /> Saving...
-          </span>
-        ) : 'Add Member'}
+        {saving ? <InlineSpinner label="Saving…" /> : 'Add Member'}
       </button>
     </form>
   )

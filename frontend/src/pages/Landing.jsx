@@ -211,7 +211,7 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="border-y border-blue-100 bg-blue-50 py-8">
+        <section className="border-y border-blue-100 bg-blue-50 py-8" aria-label="MediLens data sources">
           <div className="mx-auto flex max-w-6xl flex-col items-center justify-center gap-4 px-4 text-center sm:flex-row sm:gap-8 sm:px-6 lg:px-8">
             <p className="text-sm font-bold text-slate-600">Powered by trusted health and AI data sources</p>
             <div className="flex flex-wrap justify-center gap-x-6 gap-y-2 text-sm font-extrabold tracking-tight text-slate-500">
@@ -231,7 +231,7 @@ export default function Landing() {
             <div className="relative mx-auto max-w-2xl">
               <p className="text-sm font-bold uppercase tracking-[0.16em] text-blue-100">See the difference context makes</p>
               <h2 className="mt-3 text-3xl font-extrabold tracking-tight sm:text-4xl">Give every family member a safer medication check.</h2>
-              <p className="mt-4 text-base leading-7 text-blue-100">Explore the read-only demo to see how records and safety guidance come together.</p>
+              <p className="mt-4 text-base leading-7 text-blue-100">Explore sample family data, add your own family members, and see how records and safety guidance come together.</p>
               <Link to="/login?mode=demo" className="mt-8 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-white px-5 text-sm font-bold text-blue-700 shadow-lg outline-none transition-all hover:-translate-y-0.5 hover:bg-blue-50 hover:shadow-xl focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-offset-2 focus-visible:ring-offset-blue-700">
                 Try Demo <ArrowRightIcon className="h-4 w-4" />
               </Link>
