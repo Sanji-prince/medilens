@@ -1,0 +1,13 @@
+Patient: John Doe
+Date: 2024-03-15
+Lab Report
+
+Glucose: 95 mg/dL (normal)
+HbA1c: 6.2% (slightly elevated)
+Cholesterol: 210 mg/dL
+
+Medications:
+- Metformin 500mg twice daily
+- Lisinopril 10mg once daily
+
+Notes: Continue current regimen. Follow up in 3 months.
